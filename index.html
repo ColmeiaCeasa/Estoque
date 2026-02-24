@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Controle de Estoque</title>
+    <style>
+        body { font-family: Arial, sans-serif; background-color: #f0f2f5; display: flex; justify-content: center; padding: 20px; }
+        .container { background: white; padding: 25px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); width: 100%; max-width: 500px; }
+        h2 { text-align: center; color: #333; margin-top: 0; }
+        .form-group { margin-bottom: 15px; }
+        label { display: block; margin-bottom: 5px; font-weight: bold; color: #555; }
+        input, select { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; }
+        input[readonly] { background-color: #e9ecef; cursor: not-allowed; }
+        .radio-group { display: flex; gap: 15px; margin-bottom: 15px; }
+        .radio-group label { font-weight: normal; display: flex; align-items: center; gap: 5px; }
+        button { width: 100%; padding: 12px; background-color: #0056b3; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 16px; font-weight: bold; margin-top: 10px; }
+        button:hover { background-color: #004494; }
+        .status { margin-top: 15px; text-align: center; font-weight: bold; }
+        .loading { font-size: 0.9em; color: #0056b3; display: none; margin-top: 5px; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h2>Lançamento de Estoque</h2>
+    <form id="form-estoque">
+        
+        <div class="form-group">
+            <label for="dataLanca">Data do Lançamento:</label>
+            <input type="date" id="dataLanca" name="dataLanca" required>
+        </div>
+
+        <div class="form-group">
+            <label for="codigo">Código do Produto:</label>
+            <input type="text" id="codigo" name="codigo" required placeholder="Digite o código e clique fora">
+            <div id="loading-prod" class="loading">Buscando produto...</div>
+        </div>
+
+        <div class="form-group">
+            <label for="produto">Descrição do Produto:</label>
+            <input type="text" id="produto" name="produto" required readonly placeholder="Preenchimento automático">
+        </div>
+
+        <label>Tipo de Movimentação:</label>
+        <div class="radio-group">
+            <label><input type="radio" name="tipoMovimento" value="Entrada" required onchange="atualizarCategorias()"> Entrada</label>
+            <label><input type="radio" name="tipoMovimento" value="Saída" required onchange="atualizarCategorias()"> Saída</label>
+        </div>
+
+        <div class="form-group">
+            <label for="categoria">Categoria:</label>
+            <select id="categoria" name="categoria" required>
+                <option value="">Selecione o tipo primeiro...</option>
+            </select>
+        </div>
+
+        <div class="form-group">
+            <label for="quantidade">Quantidade:</label>
+            <input type="number" id="quantidade" name="quantidade" min="1" required>
+        </div>
+
+        <button type="submit" id="btn-enviar">Registrar Movimentação</button>
+        <div id="mensagem" class="status"></div>
+    </form>
+</div>
+
+<script>
+    // === COLE SUA URL DO APPS SCRIPT AQUI ===
+    const scriptURL = 'COLE_SUA_URL_AQUI'; 
+    
+    // Define a data de hoje automaticamente
+    document.getElementById('dataLanca').valueAsDate = new Date();
+
+    // Listas de categorias
+    const categoriasEntrada = ["Compra", "Entrada", "Entrada CD/Box", "Devolução do Cliente"];
+    const categoriasSaida = ["Vendas", "Saída Box/CD", "Mercadoria Emprestada", "Quebra", "Doação"];
+
+    function atualizarCategorias() {
+        const tipo = document.querySelector('input[name="tipoMovimento"]:checked').value;
+        const selectCategoria = document.getElementById('categoria');
+        selectCategoria.innerHTML = '<option value="">Selecione...</option>';
+        
+        const lista = tipo === 'Entrada' ? categoriasEntrada : categoriasSaida;
+        
+        lista.forEach(cat => {
+            let option = document.createElement('option');
+            option.value = cat;
+            option.textContent = cat;
+            selectCategoria.appendChild(option);
+        });
+    }
+
+    // Busca o produto pelo código ao sair do campo (blur)
+    document.getElementById('codigo').addEventListener('blur', function() {
+        const codigo = this.value.trim();
+        const inputProduto = document.getElementById('produto');
+        const loading = document.getElementById('loading-prod');
+
+        if(codigo) {
+            loading.style.display = 'block';
+            inputProduto.value = '';
+            
+            fetch(`${scriptURL}?codigo=${codigo}`)
+                .then(response => response.json())
+                .then(data => {
+                    loading.style.display = 'none';
+                    if(data.encontrado) {
+                        inputProduto.value = data.nome;
+                    } else {
+                        inputProduto.value = 'Produto não encontrado!';
+                    }
+                })
+                .catch(error => {
+                    loading.style.display = 'none';
+                    inputProduto.value = 'Erro ao buscar.';
+                });
+        }
+    });
+
+    // Envio do formulário
+    const form = document.getElementById('form-estoque');
+    const btnEnviar = document.getElementById('btn-enviar');
+    const mensagem = document.getElementById('mensagem');
+
+    form.addEventListener('submit', e => {
+        e.preventDefault(); 
+        
+        // Proteção para não enviar se o produto não foi encontrado
+        if(document.getElementById('produto').value === 'Produto não encontrado!' || document.getElementById('produto').value === '') {
+            mensagem.style.color = 'red';
+            mensagem.innerText = 'Corrija o código do produto antes de enviar.';
+            return;
+        }
+
+        btnEnviar.innerText = 'Registrando...';
+        btnEnviar.disabled = true;
+        mensagem.innerText = '';
+
+        fetch(scriptURL, { method: 'POST', body: new FormData(form) })
+            .then(response => {
+                mensagem.style.color = 'green';
+                mensagem.innerText = 'Movimentação registrada com sucesso!';
+                form.reset(); 
+                document.getElementById('dataLanca').valueAsDate = new Date(); // Reseta a data para hoje
+                document.getElementById('categoria').innerHTML = '<option value="">Selecione o tipo primeiro...</option>';
+                btnEnviar.innerText = 'Registrar Movimentação';
+                btnEnviar.disabled = false;
+            })
+            .catch(error => {
+                mensagem.style.color = 'red';
+                mensagem.innerText = 'Erro ao registrar. Tente novamente.';
+                btnEnviar.innerText = 'Registrar Movimentação';
+                btnEnviar.disabled = false;
+            });
+    });
+</script>
+
+</body>
+</html>

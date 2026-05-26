@@ -20,7 +20,6 @@
             padding: 15px; 
             background-color: #f0f2f5;
             margin: 0;
-            /* Removido o user-select: none que estava causando bloqueio no mobile */
         }
         h1 {
             color: #333;
@@ -76,6 +75,8 @@
             color: #333;
             transition: all 0.3s ease;
         }
+        
+        /* Cores de status */
         input.salvo {
             background-color: #e8f5e9;
             border-color: #4caf50;
@@ -86,6 +87,7 @@
             border-color: #ff9800;
             color: #e65100;
         }
+        
         .loading { 
             text-align: center;
             font-style: italic; 
@@ -123,9 +125,9 @@
 <body>
     <div class="container">
         <h1>Preços de Custo</h1>
-        <p>Digite o valor (salva automaticamente ao sair do campo)</p>
+        <p>Digite e aguarde 1 segundo. O sistema salva sozinho.</p>
         
-        <div id="status" class="loading">Conectando ao banco de dados e buscando planilha...</div>
+        <div id="status" class="loading">Iniciando sistema...</div>
         
         <div class="table-responsive">
             <table id="tabelaProdutos" style="display: none;">
@@ -162,6 +164,9 @@
         const sheetId = '1cl89xjWPjxyULh4Jw5XZc89uO057pDPaivUKSCiy-xM';
         const csvUrl = `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:csv`;
 
+        // Armazena os temporizadores do salvamento automático
+        window.timers = {};
+
         function higienizarChave(chave) {
             return chave.replace(/[.#$\[\]]/g, "_");
         }
@@ -176,6 +181,7 @@
                     throw new Error('Planilha bloqueada por privacidade.');
                 }
 
+                // Lê o banco de dados (se estiver zerado, precosSalvos será apenas vazio)
                 let precosSalvos = {};
                 const dbRef = ref(db);
                 try {
@@ -190,7 +196,7 @@
                 processarDados(text, precosSalvos);
 
             } catch (error) {
-                document.getElementById('status').innerHTML = `Erro ao carregar os dados.`;
+                document.getElementById('status').innerHTML = `Erro ao carregar a planilha.`;
                 document.getElementById('status').className = 'error';
                 console.error(error);
             }
@@ -217,7 +223,7 @@
                 const valorSalvo = precosSalvos[chaveFirebase] || '';
                 const classeAdicional = valorSalvo !== '' ? 'salvo' : '';
 
-                // Mudança principal aqui: onkeydown apenas fecha o teclado, onchange salva no banco
+                // Evento oninput cuida de tudo agora: formata a moeda e agenda o salvamento
                 html += `
                     <tr>
                         <td>${codigo}</td>
@@ -229,9 +235,7 @@
                                 placeholder="R$ 0,00" 
                                 class="preco-custo ${classeAdicional}"
                                 value="${valorSalvo}"
-                                oninput="window.mascaraMoeda(this)"
-                                onkeydown="window.fecharTeclado(event, this)"
-                                onchange="window.salvarPreco(this, '${codigo}')"
+                                oninput="window.aoDigitar(this, '${codigo}')"
                             >
                         </td>
                     </tr>
@@ -243,46 +247,50 @@
             document.getElementById('tabelaProdutos').style.display = 'table';
         }
 
-        window.mascaraMoeda = function(campo) {
+        // Função principal disparada cada vez que o usuário encosta numa tecla
+        window.aoDigitar = function(campo, codigo) {
+            // 1. Aplica a máscara de dinheiro
             let valor = campo.value.replace(/\D/g, ""); 
-            
             if (valor === "") {
                 campo.value = "";
-                campo.classList.remove('salvo'); 
-                return;
+                campo.classList.remove('salvo', 'salvando'); 
+            } else {
+                valor = (parseInt(valor, 10) / 100).toFixed(2);
+                valor = valor.replace(".", ",");
+                valor = valor.replace(/(\d)(?=(\d{3})+(?!\d))/g, "$1.");
+                campo.value = "R$ " + valor;
             }
-            
-            valor = (parseInt(valor, 10) / 100).toFixed(2);
-            valor = valor.replace(".", ",");
-            valor = valor.replace(/(\d)(?=(\d{3})+(?!\d))/g, "$1.");
-            
-            campo.value = "R$ " + valor;
-            campo.classList.remove('salvo'); 
+
+            // 2. Cancela o salvamento anterior (caso ele ainda esteja digitando rápido)
+            clearTimeout(window.timers[codigo]);
+
+            // 3. Muda a cor para laranja (indicando que percebeu a digitação e está esperando)
+            campo.classList.remove('salvo');
+            if (campo.value !== "") {
+                campo.classList.add('salvando');
+            }
+
+            // 4. Agenda o salvamento definitivo para 1.2 segundos no futuro
+            window.timers[codigo] = setTimeout(() => {
+                window.salvarPreco(campo, codigo);
+            }, 1200);
         };
 
-        // Função para forçar o fechamento do teclado no celular se apertar "Concluir/Enter"
-        window.fecharTeclado = function(event, campo) {
-            if (event.key === 'Enter' || event.keyCode === 13) {
-                event.preventDefault(); 
-                campo.blur(); // Isso tira o foco do campo e automaticamente engatilha a função salvarPreco
-            }
-        };
-
-        // Função oficial que salva os dados no Firebase (roda ao sair do campo)
+        // Função invisível que envia os dados para o Firebase
         window.salvarPreco = async function(campo, codigo) {
             const valor = campo.value;
             if (!valor || valor === "R$ 0,00") return;
 
-            campo.classList.add('salvando');
             const chaveFirebase = higienizarChave(codigo);
 
             try {
                 await set(ref(db, 'precos_custo/' + chaveFirebase), valor);
+                // Quando o salvamento dá certo na nuvem, fica verde
                 campo.classList.remove('salvando');
                 campo.classList.add('salvo');
             } catch (error) {
                 campo.classList.remove('salvando');
-                alert("Erro ao salvar! Verifique as regras do Firebase.");
+                alert("Erro ao salvar! Verifique sua internet.");
                 console.error(error);
             }
         };

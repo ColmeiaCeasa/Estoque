@@ -12,7 +12,7 @@
     <meta name="theme-color" content="#0056b3">
 
     <link rel="icon" sizes="192x192" href="https://cdn-icons-png.flaticon.com/512/6902/6902345.png">
-    <link rel="apple-touch-icon" href="https://cdn-icons-png.flaticon.com/512/6902/6902345.png.png">
+    <link rel="apple-touch-icon" href="https://cdn-icons-png.flaticon.com/512/6902/6902345.png">
     
     <style>
         body { 
@@ -20,8 +20,7 @@
             padding: 15px; 
             background-color: #f0f2f5;
             margin: 0;
-            -webkit-user-select: none;
-            user-select: none;
+            /* Removido o user-select: none que estava causando bloqueio no mobile */
         }
         h1 {
             color: #333;
@@ -44,7 +43,6 @@
             margin: 0 auto;
         }
         
-        /* Envolve a tabela para permitir rolagem horizontal se a tela for extremamente fina */
         .table-responsive {
             width: 100%;
             overflow-x: auto;
@@ -55,7 +53,7 @@
             width: 100%; 
             border-collapse: collapse; 
             margin-top: 15px; 
-            min-width: 320px; /* Garante que não esmague demais */
+            min-width: 320px; 
         }
         th, td { 
             border: 1px solid #ddd; 
@@ -77,8 +75,6 @@
             font-weight: bold;
             color: #333;
             transition: all 0.3s ease;
-            -webkit-user-select: text; 
-            user-select: text;
         }
         input.salvo {
             background-color: #e8f5e9;
@@ -104,12 +100,10 @@
             margin-top: 30px;
         }
 
-        /* AJUSTES PARA MANTER A TABELA NO CELULAR */
         @media screen and (max-width: 600px) {
             body { padding: 5px; }
             .container { padding: 10px; }
             
-            /* Reduz o espaço interno e a fonte para caber tudo */
             th, td { 
                 padding: 8px 4px; 
                 font-size: 12px; 
@@ -117,20 +111,19 @@
             
             input.preco-custo { 
                 padding: 8px 4px; 
-                font-size: 14px; /* Mantém um bom tamanho para leitura */
+                font-size: 14px; 
             }
 
-            /* Força larguras específicas para cada coluna no celular */
-            th:nth-child(1), td:nth-child(1) { width: 15%; } /* Código */
-            th:nth-child(2), td:nth-child(2) { width: 45%; } /* Produto */
-            th:nth-child(3), td:nth-child(3) { width: 40%; } /* Preço */
+            th:nth-child(1), td:nth-child(1) { width: 15%; }
+            th:nth-child(2), td:nth-child(2) { width: 45%; }
+            th:nth-child(3), td:nth-child(3) { width: 40%; }
         }
     </style>
 </head>
 <body>
     <div class="container">
         <h1>Preços de Custo</h1>
-        <p>Digite o valor e aperte <b>Enter</b> para salvar na nuvem</p>
+        <p>Digite o valor (salva automaticamente ao sair do campo)</p>
         
         <div id="status" class="loading">Conectando ao banco de dados e buscando planilha...</div>
         
@@ -191,14 +184,13 @@
                         precosSalvos = snapshot.val();
                     }
                 } catch (firebaseError) {
-                    console.error("Erro ao ler Firebase. Verifique as Regras de Segurança.", firebaseError);
+                    console.error("Erro ao ler Firebase.", firebaseError);
                 }
                 
                 processarDados(text, precosSalvos);
 
             } catch (error) {
-                document.getElementById('status').innerHTML = 
-                    `Erro ao carregar os dados.<br><br><span style="font-size:12px; font-weight:normal; color:#333;">Certifique-se de que a planilha está configurada como <b>"Qualquer pessoa com o link pode ver"</b> nas opções de compartilhamento do Google Sheets.</span>`;
+                document.getElementById('status').innerHTML = `Erro ao carregar os dados.`;
                 document.getElementById('status').className = 'error';
                 console.error(error);
             }
@@ -225,6 +217,7 @@
                 const valorSalvo = precosSalvos[chaveFirebase] || '';
                 const classeAdicional = valorSalvo !== '' ? 'salvo' : '';
 
+                // Mudança principal aqui: onkeydown apenas fecha o teclado, onchange salva no banco
                 html += `
                     <tr>
                         <td>${codigo}</td>
@@ -237,7 +230,8 @@
                                 class="preco-custo ${classeAdicional}"
                                 value="${valorSalvo}"
                                 oninput="window.mascaraMoeda(this)"
-                                onkeydown="window.verificarEnter(event, this, '${codigo}')"
+                                onkeydown="window.fecharTeclado(event, this)"
+                                onchange="window.salvarPreco(this, '${codigo}')"
                             >
                         </td>
                     </tr>
@@ -266,26 +260,30 @@
             campo.classList.remove('salvo'); 
         };
 
-        window.verificarEnter = async function(event, campo, codigo) {
-            if (event.key === 'Enter') {
+        // Função para forçar o fechamento do teclado no celular se apertar "Concluir/Enter"
+        window.fecharTeclado = function(event, campo) {
+            if (event.key === 'Enter' || event.keyCode === 13) {
                 event.preventDefault(); 
-                campo.blur(); 
-                
-                const valor = campo.value;
-                if (!valor || valor === "R$ 0,00") return;
+                campo.blur(); // Isso tira o foco do campo e automaticamente engatilha a função salvarPreco
+            }
+        };
 
-                campo.classList.add('salvando');
-                const chaveFirebase = higienizarChave(codigo);
+        // Função oficial que salva os dados no Firebase (roda ao sair do campo)
+        window.salvarPreco = async function(campo, codigo) {
+            const valor = campo.value;
+            if (!valor || valor === "R$ 0,00") return;
 
-                try {
-                    await set(ref(db, 'precos_custo/' + chaveFirebase), valor);
-                    campo.classList.remove('salvando');
-                    campo.classList.add('salvo');
-                } catch (error) {
-                    campo.classList.remove('salvando');
-                    alert("Erro ao salvar! Verifique as regras do Firebase.");
-                    console.error(error);
-                }
+            campo.classList.add('salvando');
+            const chaveFirebase = higienizarChave(codigo);
+
+            try {
+                await set(ref(db, 'precos_custo/' + chaveFirebase), valor);
+                campo.classList.remove('salvando');
+                campo.classList.add('salvo');
+            } catch (error) {
+                campo.classList.remove('salvando');
+                alert("Erro ao salvar! Verifique as regras do Firebase.");
+                console.error(error);
             }
         };
 

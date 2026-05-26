@@ -43,15 +43,25 @@
             max-width: 800px;
             margin: 0 auto;
         }
+        
+        /* Envolve a tabela para permitir rolagem horizontal se a tela for extremamente fina */
+        .table-responsive {
+            width: 100%;
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+        }
+
         table { 
             width: 100%; 
             border-collapse: collapse; 
-            margin-top: 20px; 
+            margin-top: 15px; 
+            min-width: 320px; /* Garante que não esmague demais */
         }
         th, td { 
             border: 1px solid #ddd; 
             padding: 12px; 
             text-align: left; 
+            vertical-align: middle;
         }
         th { 
             background-color: #0056b3; 
@@ -62,7 +72,7 @@
             padding: 12px; 
             box-sizing: border-box; 
             border: 1px solid #ccc;
-            border-radius: 6px;
+            border-radius: 4px;
             font-size: 16px; 
             font-weight: bold;
             color: #333;
@@ -70,13 +80,11 @@
             -webkit-user-select: text; 
             user-select: text;
         }
-        /* Cor verde quando o dado vem do Firebase ou acabou de ser salvo */
         input.salvo {
             background-color: #e8f5e9;
             border-color: #4caf50;
             color: #2e7d32;
         }
-        /* Animação para mostrar que está salvando */
         input.salvando {
             background-color: #fff3e0;
             border-color: #ff9800;
@@ -96,52 +104,26 @@
             margin-top: 30px;
         }
 
+        /* AJUSTES PARA MANTER A TABELA NO CELULAR */
         @media screen and (max-width: 600px) {
-            table { border: 0; }
-            table thead {
-                border: none;
-                clip: rect(0 0 0 0);
-                height: 1px;
-                margin: -1px;
-                overflow: hidden;
-                padding: 0;
-                position: absolute;
-                width: 1px;
+            body { padding: 5px; }
+            .container { padding: 10px; }
+            
+            /* Reduz o espaço interno e a fonte para caber tudo */
+            th, td { 
+                padding: 8px 4px; 
+                font-size: 12px; 
             }
-            table tr {
-                border: 1px solid #ddd;
-                border-radius: 8px;
-                display: block;
-                margin-bottom: 15px;
-                box-shadow: 0 2px 4px rgba(0,0,0,0.05);
-                background-color: #fafafa;
+            
+            input.preco-custo { 
+                padding: 8px 4px; 
+                font-size: 14px; /* Mantém um bom tamanho para leitura */
             }
-            table td {
-                border-bottom: 1px solid #eee;
-                display: block;
-                font-size: 14px;
-                text-align: right;
-                padding: 10px;
-                position: relative;
-            }
-            table td:last-child {
-                border-bottom: 0;
-                background-color: #fff;
-                border-radius: 0 0 8px 8px;
-            }
-            table td::before {
-                content: attr(data-label);
-                float: left;
-                font-weight: bold;
-                color: #0056b3;
-                text-transform: uppercase;
-                font-size: 12px;
-                margin-top: 2px;
-            }
-            input.preco-custo {
-                margin-top: 8px;
-                text-align: left;
-            }
+
+            /* Força larguras específicas para cada coluna no celular */
+            th:nth-child(1), td:nth-child(1) { width: 15%; } /* Código */
+            th:nth-child(2), td:nth-child(2) { width: 45%; } /* Produto */
+            th:nth-child(3), td:nth-child(3) { width: 40%; } /* Preço */
         }
     </style>
 </head>
@@ -152,25 +134,25 @@
         
         <div id="status" class="loading">Conectando ao banco de dados e buscando planilha...</div>
         
-        <table id="tabelaProdutos" style="display: none;">
-            <thead>
-                <tr>
-                    <th>Código</th>
-                    <th>Produto</th>
-                    <th>Preço de Custo (R$)</th>
-                </tr>
-            </thead>
-            <tbody id="corpoTabela">
-            </tbody>
-        </table>
+        <div class="table-responsive">
+            <table id="tabelaProdutos" style="display: none;">
+                <thead>
+                    <tr>
+                        <th>Código</th>
+                        <th>Produto</th>
+                        <th>Preço de Custo (R$)</th>
+                    </tr>
+                </thead>
+                <tbody id="corpoTabela">
+                </tbody>
+            </table>
+        </div>
     </div>
 
     <script type="module">
-        // Importa as funções do Firebase via CDN do Google
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
         import { getDatabase, ref, set, get, child } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
 
-        // Sua configuração do Firebase
         const firebaseConfig = {
             apiKey: "AIzaSyDX3dV8VaOXZBRCc0o7ERxVU0Q06qRa7p8",
             authDomain: "custo-c84d6.firebaseapp.com",
@@ -181,21 +163,18 @@
             appId: "1:703752890902:web:29874e3f9d6d47b3286337"
         };
 
-        // Inicializa o Firebase e o Banco de Dados (Realtime Database)
         const app = initializeApp(firebaseConfig);
         const db = getDatabase(app);
 
         const sheetId = '1cl89xjWPjxyULh4Jw5XZc89uO057pDPaivUKSCiy-xM';
         const csvUrl = `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:csv`;
 
-        // Função para evitar que códigos com ponto ou caracteres especiais quebrem o Firebase
         function higienizarChave(chave) {
             return chave.replace(/[.#$\[\]]/g, "_");
         }
 
         async function carregarDados() {
             try {
-                // 1. Busca os dados da planilha Google
                 const response = await fetch(csvUrl);
                 if (!response.ok) throw new Error('Erro na resposta do servidor.');
                 const text = await response.text();
@@ -204,7 +183,6 @@
                     throw new Error('Planilha bloqueada por privacidade.');
                 }
 
-                // 2. Busca os preços que já estão salvos no Firebase
                 let precosSalvos = {};
                 const dbRef = ref(db);
                 try {
@@ -216,12 +194,11 @@
                     console.error("Erro ao ler Firebase. Verifique as Regras de Segurança.", firebaseError);
                 }
                 
-                // 3. Monta a tabela cruzando a planilha com o Firebase
                 processarDados(text, precosSalvos);
 
             } catch (error) {
                 document.getElementById('status').innerHTML = 
-                    `Erro ao carregar os dados. Verifique a internet e o link da planilha.`;
+                    `Erro ao carregar os dados.<br><br><span style="font-size:12px; font-weight:normal; color:#333;">Certifique-se de que a planilha está configurada como <b>"Qualquer pessoa com o link pode ver"</b> nas opções de compartilhamento do Google Sheets.</span>`;
                 document.getElementById('status').className = 'error';
                 console.error(error);
             }
@@ -244,16 +221,15 @@
 
                 if (codigo.toLowerCase() === 'código' || codigo.toLowerCase() === 'codigo') continue;
 
-                // Verifica se já existe um valor salvo no Firebase para este código
                 const chaveFirebase = higienizarChave(codigo);
                 const valorSalvo = precosSalvos[chaveFirebase] || '';
                 const classeAdicional = valorSalvo !== '' ? 'salvo' : '';
 
                 html += `
                     <tr>
-                        <td data-label="Código">${codigo}</td>
-                        <td data-label="Produto">${produto}</td>
-                        <td data-label="Preço de Custo">
+                        <td>${codigo}</td>
+                        <td>${produto}</td>
+                        <td>
                             <input 
                                 type="text" 
                                 inputmode="numeric" 
@@ -273,8 +249,6 @@
             document.getElementById('tabelaProdutos').style.display = 'table';
         }
 
-        // --- FUNÇÕES EXPOSTAS AO WINDOW PARA FUNCIONAREM NO HTML COM MODULE ---
-
         window.mascaraMoeda = function(campo) {
             let valor = campo.value.replace(/\D/g, ""); 
             
@@ -289,32 +263,25 @@
             valor = valor.replace(/(\d)(?=(\d{3})+(?!\d))/g, "$1.");
             
             campo.value = "R$ " + valor;
-            campo.classList.remove('salvo'); // Tira o verde enquanto está digitando
+            campo.classList.remove('salvo'); 
         };
 
         window.verificarEnter = async function(event, campo, codigo) {
             if (event.key === 'Enter') {
                 event.preventDefault(); 
-                campo.blur(); // Esconde o teclado
+                campo.blur(); 
                 
                 const valor = campo.value;
                 if (!valor || valor === "R$ 0,00") return;
 
-                // Mostra um estado de "salvando" visualmente
                 campo.classList.add('salvando');
-
-                // Prepara a chave para o Firebase
                 const chaveFirebase = higienizarChave(codigo);
 
                 try {
-                    // Grava o dado no Realtime Database na pasta "precos_custo"
                     await set(ref(db, 'precos_custo/' + chaveFirebase), valor);
-                    
-                    // Sucesso: fica verde
                     campo.classList.remove('salvando');
                     campo.classList.add('salvo');
                 } catch (error) {
-                    // Erro: remove cores e avisa
                     campo.classList.remove('salvando');
                     alert("Erro ao salvar! Verifique as regras do Firebase.");
                     console.error(error);
@@ -322,7 +289,6 @@
             }
         };
 
-        // Inicia o sistema
         carregarDados();
     </script>
 </body>

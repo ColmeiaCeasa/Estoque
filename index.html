@@ -2,159 +2,196 @@
 <html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Controle de Estoque</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Sistema de Preços de Custo</title>
     <style>
-        body { font-family: Arial, sans-serif; background-color: #f0f2f5; display: flex; justify-content: center; padding: 20px; }
-        .container { background: white; padding: 25px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); width: 100%; max-width: 500px; }
-        h2 { text-align: center; color: #333; margin-top: 0; }
-        .form-group { margin-bottom: 15px; }
-        label { display: block; margin-bottom: 5px; font-weight: bold; color: #555; }
-        input, select { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; }
-        input[readonly] { background-color: #e9ecef; cursor: not-allowed; }
-        .radio-group { display: flex; gap: 15px; margin-bottom: 15px; }
-        .radio-group label { font-weight: normal; display: flex; align-items: center; gap: 5px; }
-        button { width: 100%; padding: 12px; background-color: #0056b3; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 16px; font-weight: bold; margin-top: 10px; }
-        button:hover { background-color: #004494; }
-        .status { margin-top: 15px; text-align: center; font-weight: bold; }
-        .loading { font-size: 0.9em; color: #0056b3; display: none; margin-top: 5px; }
+        body { 
+            font-family: Arial, sans-serif; 
+            padding: 15px; 
+            background-color: #f0f2f5;
+            margin: 0;
+        }
+        h1 {
+            color: #333;
+            font-size: 22px;
+            text-align: center;
+        }
+        p {
+            text-align: center;
+            color: #666;
+            font-size: 14px;
+        }
+        .container {
+            background-color: #fff;
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        table { 
+            width: 100%; 
+            border-collapse: collapse; 
+            margin-top: 20px; 
+        }
+        th, td { 
+            border: 1px solid #ddd; 
+            padding: 12px; 
+            text-align: left; 
+        }
+        th { 
+            background-color: #0056b3; 
+            color: white;
+        }
+        input[type="number"] { 
+            width: 100%; 
+            padding: 12px; /* Área de toque maior para os dedos */
+            box-sizing: border-box; 
+            border: 1px solid #ccc;
+            border-radius: 6px;
+            font-size: 16px; /* Evita que o iPhone dê zoom automático ao focar no campo */
+        }
+        .loading { 
+            text-align: center;
+            font-style: italic; 
+            color: #666; 
+            margin-top: 15px;
+        }
+        .error {
+            color: red;
+            font-weight: bold;
+            text-align: center;
+        }
+
+        /* =========================================
+           ADAPTAÇÃO PARA CELULARES (RESPONSIVIDADE)
+           ========================================= */
+        @media screen and (max-width: 600px) {
+            table {
+                border: 0;
+            }
+            /* Esconde o cabeçalho original da tabela */
+            table thead {
+                border: none;
+                clip: rect(0 0 0 0);
+                height: 1px;
+                margin: -1px;
+                overflow: hidden;
+                padding: 0;
+                position: absolute;
+                width: 1px;
+            }
+            /* Transforma cada linha (tr) em um "cartão" */
+            table tr {
+                border: 1px solid #ddd;
+                border-radius: 8px;
+                display: block;
+                margin-bottom: 15px;
+                box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+                background-color: #fafafa;
+            }
+            /* Ajusta as células (td) */
+            table td {
+                border-bottom: 1px solid #eee;
+                display: block;
+                font-size: 14px;
+                text-align: right;
+                padding: 10px;
+                position: relative;
+            }
+            table td:last-child {
+                border-bottom: 0;
+                background-color: #fff;
+                border-radius: 0 0 8px 8px;
+            }
+            /* Adiciona os "rótulos" antes dos dados no celular */
+            table td::before {
+                content: attr(data-label);
+                float: left;
+                font-weight: bold;
+                color: #0056b3;
+                text-transform: uppercase;
+                font-size: 12px;
+                margin-top: 2px;
+            }
+            /* Ajusta o campo de input no mobile */
+            input[type="number"] {
+                margin-top: 8px;
+                text-align: left;
+            }
+        }
     </style>
 </head>
 <body>
-
-<div class="container">
-    <h2>Lançamento de Estoque</h2>
-    <form id="form-estoque">
+    <div class="container">
+        <h1>Preços de Custo</h1>
+        <p>Preencha os valores abaixo.</p>
         
-        <div class="form-group">
-            <label for="dataLanca">Data do Lançamento:</label>
-            <input type="date" id="dataLanca" name="dataLanca" required>
-        </div>
-
-        <div class="form-group">
-            <label for="codigo">Código do Produto:</label>
-            <input type="text" id="codigo" name="codigo" required placeholder="Digite o código e clique fora">
-            <div id="loading-prod" class="loading">Buscando produto...</div>
-        </div>
-
-        <div class="form-group">
-            <label for="produto">Descrição do Produto:</label>
-            <input type="text" id="produto" name="produto" required readonly placeholder="Preenchimento automático">
-        </div>
-
-        <label>Tipo de Movimentação:</label>
-        <div class="radio-group">
-            <label><input type="radio" name="tipoMovimento" value="Entrada" required onchange="atualizarCategorias()"> Entrada</label>
-            <label><input type="radio" name="tipoMovimento" value="Saída" required onchange="atualizarCategorias()"> Saída</label>
-        </div>
-
-        <div class="form-group">
-            <label for="categoria">Categoria:</label>
-            <select id="categoria" name="categoria" required>
-                <option value="">Selecione o tipo primeiro...</option>
-            </select>
-        </div>
-
-        <div class="form-group">
-            <label for="quantidade">Quantidade:</label>
-            <input type="number" id="quantidade" name="quantidade" min="1" required>
-        </div>
-
-        <button type="submit" id="btn-enviar">Registrar Movimentação</button>
-        <div id="mensagem" class="status"></div>
-    </form>
-</div>
-
-<script>
-    // === COLE SUA URL DO APPS SCRIPT AQUI ===
-    const scriptURL = 'https://script.google.com/macros/s/AKfycbz3AjAJP7qNYEpWAsYwDO2VBnLrltQGdMYonKpTzRWnzjwy51QLbF2ujUayJHWjq2Ck/exec'; 
-    
-    // Define a data de hoje automaticamente
-    document.getElementById('dataLanca').valueAsDate = new Date();
-
-    // Listas de categorias
-    const categoriasEntrada = ["Compra", "Entrada", "Entrada CD/Box", "Devolução do Cliente"];
-    const categoriasSaida = ["Vendas", "Saída Box/CD", "Mercadoria Emprestada", "Quebra", "Doação"];
-
-    function atualizarCategorias() {
-        const tipo = document.querySelector('input[name="tipoMovimento"]:checked').value;
-        const selectCategoria = document.getElementById('categoria');
-        selectCategoria.innerHTML = '<option value="">Selecione...</option>';
+        <div id="status" class="loading">Carregando dados da planilha...</div>
         
-        const lista = tipo === 'Entrada' ? categoriasEntrada : categoriasSaida;
-        
-        lista.forEach(cat => {
-            let option = document.createElement('option');
-            option.value = cat;
-            option.textContent = cat;
-            selectCategoria.appendChild(option);
-        });
-    }
+        <table id="tabelaProdutos" style="display: none;">
+            <thead>
+                <tr>
+                    <th>Código</th>
+                    <th>Produto</th>
+                    <th>Preço de Custo (R$)</th>
+                </tr>
+            </thead>
+            <tbody id="corpoTabela">
+                </tbody>
+        </table>
+    </div>
 
-    // Busca o produto pelo código ao sair do campo (blur)
-    document.getElementById('codigo').addEventListener('blur', function() {
-        const codigo = this.value.trim();
-        const inputProduto = document.getElementById('produto');
-        const loading = document.getElementById('loading-prod');
+    <script>
+        const sheetId = '1cl89xjWPjxyULh4Jw5XZc89uO057pDPaivUKSCiy-xM';
+        const csvUrl = `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:csv`;
 
-        if(codigo) {
-            loading.style.display = 'block';
-            inputProduto.value = '';
+        async function carregarDados() {
+            try {
+                const response = await fetch(csvUrl);
+                if (!response.ok) throw new Error('Falha na requisição.');
+                
+                const csvText = await response.text();
+                processarCSV(csvText);
+            } catch (error) {
+                const statusDiv = document.getElementById('status');
+                statusDiv.innerText = 'Erro ao carregar a planilha. Verifique o compartilhamento do link.';
+                statusDiv.className = 'error';
+            }
+        }
+
+        function processarCSV(csv) {
+            const linhas = csv.split('\n');
+            const corpoTabela = document.getElementById('corpoTabela');
+            let html = '';
             
-            fetch(`${scriptURL}?codigo=${codigo}`)
-                .then(response => response.json())
-                .then(data => {
-                    loading.style.display = 'none';
-                    if(data.encontrado) {
-                        inputProduto.value = data.nome;
-                    } else {
-                        inputProduto.value = 'Produto não encontrado!';
-                    }
-                })
-                .catch(error => {
-                    loading.style.display = 'none';
-                    inputProduto.value = 'Erro ao buscar.';
-                });
-        }
-    });
+            for (let i = 1; i < linhas.length; i++) {
+                if (linhas[i].trim() === '') continue; 
+                
+                const colunas = linhas[i].match(/(".*?"|[^",\s]+)(?=\s*,|\s*$)/g) || [];
+                
+                const codigo = colunas[0] ? colunas[0].replace(/(^"|"$)/g, '') : '-';
+                const produto = colunas[1] ? colunas[1].replace(/(^"|"$)/g, '') : '-';
 
-    // Envio do formulário
-    const form = document.getElementById('form-estoque');
-    const btnEnviar = document.getElementById('btn-enviar');
-    const mensagem = document.getElementById('mensagem');
-
-    form.addEventListener('submit', e => {
-        e.preventDefault(); 
-        
-        // Proteção para não enviar se o produto não foi encontrado
-        if(document.getElementById('produto').value === 'Produto não encontrado!' || document.getElementById('produto').value === '') {
-            mensagem.style.color = 'red';
-            mensagem.innerText = 'Corrija o código do produto antes de enviar.';
-            return;
+                // Repare na tag 'data-label', ela é usada pelo CSS no celular para mostrar o nome da coluna
+                html += `
+                    <tr>
+                        <td data-label="Código">${codigo}</td>
+                        <td data-label="Produto">${produto}</td>
+                        <td data-label="Preço de Custo (R$)">
+                            <input type="number" step="0.01" min="0" placeholder="R$ 0,00" class="preco-custo">
+                        </td>
+                    </tr>
+                `;
+            }
+            
+            corpoTabela.innerHTML = html;
+            
+            document.getElementById('status').style.display = 'none';
+            document.getElementById('tabelaProdutos').style.display = 'table';
         }
 
-        btnEnviar.innerText = 'Registrando...';
-        btnEnviar.disabled = true;
-        mensagem.innerText = '';
-
-        fetch(scriptURL, { method: 'POST', body: new FormData(form) })
-            .then(response => {
-                mensagem.style.color = 'green';
-                mensagem.innerText = 'Movimentação registrada com sucesso!';
-                form.reset(); 
-                document.getElementById('dataLanca').valueAsDate = new Date(); // Reseta a data para hoje
-                document.getElementById('categoria').innerHTML = '<option value="">Selecione o tipo primeiro...</option>';
-                btnEnviar.innerText = 'Registrar Movimentação';
-                btnEnviar.disabled = false;
-            })
-            .catch(error => {
-                mensagem.style.color = 'red';
-                mensagem.innerText = 'Erro ao registrar. Tente novamente.';
-                btnEnviar.innerText = 'Registrar Movimentação';
-                btnEnviar.disabled = false;
-            });
-    });
-</script>
-
+        carregarDados();
+    </script>
 </body>
 </html>
